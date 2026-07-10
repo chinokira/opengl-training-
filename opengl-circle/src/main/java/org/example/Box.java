@@ -8,12 +8,12 @@ import static org.lwjgl.opengl.GL11.glVertex3f;
 
 public class Box {
 
-    private final float boxLeft = -1.0f;
-    private final float boxRight = 1.0f;
-    private final float boxBottom = -1.0f;
-    private final float boxTop = 1.0f;
-    private final float boxBack = -1.0f;
-    private final float boxFront = 1.0f;
+    private final float boxLeft = -2.0f;
+    private final float boxRight = 2.0f;
+    private final float boxBottom = -2.0f;
+    private final float boxTop = 2.0f;
+    private final float boxBack = -2.0f;
+    private final float boxFront = 2.0f;
 
 
     public void drawBox3D() {
@@ -85,5 +85,17 @@ public class Box {
 
     public float getFront() {
         return boxFront;
+    }
+
+    public float getMiddleX() {
+        return (boxLeft + boxRight) / 2;
+    }
+
+    public float getMiddleY() {
+        return (boxBottom + boxTop) / 2;
+    }
+
+    public float getMiddleZ() {
+        return (boxBack + boxFront) / 2;
     }
 }

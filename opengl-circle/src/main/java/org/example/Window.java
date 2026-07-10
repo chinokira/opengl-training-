@@ -2,8 +2,15 @@ package org.example;
 
 import org.lwjgl.opengl.GL;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.opengl.GL11.*;
@@ -17,7 +24,14 @@ public class Window {
     private final int height = 600;
 
     private final List<Sphere> spheres = new ArrayList<>();
-    
+
+    private final int physicsThreadCount = Math.max(
+            1,
+            Runtime.getRuntime().availableProcessors() - 1
+    );
+
+    private final ExecutorService physicsExecutor = Executors.newFixedThreadPool(physicsThreadCount);
+
     private ShaderProgram sphereShader;
 
     private Box box;
@@ -31,6 +45,8 @@ public class Window {
     private float cameraDistance = 4.0f;
 
     private final float gravity = -9.81f;
+
+    private final int spheresNumber = 2000;
 
     public void run() {
         init();
@@ -78,11 +94,26 @@ public class Window {
         createSpheres();
     }
 
+    private void magnetInTheMiddle(float deltaTime) {
+        float magnetStrength = 100.0f;
+
+        runSpheresInParallel((from, to) -> {
+            for (int i = from; i < to; i++) {
+                Sphere sphere = spheres.get(i);
+
+                sphere.accelerateTowards(
+                        box.getMiddleX(),
+                        box.getMiddleY(),
+                        box.getMiddleZ(),
+                        magnetStrength,
+                        deltaTime
+                );
+            }
+        });
+    }
 
     private void createSpheres() {
-        int count = 80;
-
-        for (int i = 0; i < count; i++) {
+        for (int i = 0; i < spheresNumber; i++) {
             float radius = 0.08f;
 
             float x = -0.6f + (i % 5) * 0.25f;
@@ -126,23 +157,14 @@ public class Window {
 
             setupCamera();
 
-            for (Sphere sphere : spheres) {
-                sphere.update(deltaTime, gravity);
-                sphere.keepInsideBox(box);
-            }
+            updateSpheresInParallel(deltaTime);
 
-            for (int i = 0; i < 8; i++) {
+            for (int i = 0; i < 2; i++) {
                 resolveSphereCollisions();
-
-                for (Sphere sphere : spheres) {
-                    sphere.keepInsideBox(box);
-                }
+                keepSpheresInsideBoxInParallel();
             }
 
-            for (Sphere sphere : spheres) {
-                sphere.stopIfVerySlow();
-                sphere.applyDamping();
-            }
+            finishSpheresInParallel();
 
             box.drawBox3D();
 
@@ -178,6 +200,10 @@ public class Window {
     private void handleInput(float deltaTime) {
         float rotationSpeed = 90.0f;
         float zoomSpeed = 2.0f;
+
+        if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) {
+            magnetInTheMiddle(deltaTime);
+        }
 
         if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
             cameraYaw -= rotationSpeed * deltaTime;
@@ -220,6 +246,66 @@ public class Window {
         }
     }
 
+    private void updateSpheresInParallel(float deltaTime) {
+        runSpheresInParallel((from, to) -> {
+            for (int i = from; i < to; i++) {
+                Sphere sphere = spheres.get(i);
+                sphere.update(deltaTime, gravity);
+                sphere.keepInsideBox(box);
+            }
+        });
+    }
+
+    private void keepSpheresInsideBoxInParallel() {
+        runSpheresInParallel((from, to) -> {
+            for (int i = from; i < to; i++) {
+                spheres.get(i).keepInsideBox(box);
+            }
+        });
+    }
+
+    private void finishSpheresInParallel() {
+        runSpheresInParallel((from, to) -> {
+            for (int i = from; i < to; i++) {
+                Sphere sphere = spheres.get(i);
+                sphere.stopIfVerySlow();
+                sphere.applyDamping();
+            }
+        });
+    }
+
+    private void runSpheresInParallel(SphereRangeTask task) {
+        if (spheres.isEmpty()) {
+            return;
+        }
+
+        int chunkSize = Math.max(
+                1,
+                (spheres.size() + physicsThreadCount - 1) / physicsThreadCount
+        );
+
+        List<Future<?>> futures = new ArrayList<>();
+
+        for (int start = 0; start < spheres.size(); start += chunkSize) {
+            int from = start;
+            int to = Math.min(start + chunkSize, spheres.size());
+
+            futures.add(physicsExecutor.submit(() -> task.run(from, to)));
+        }
+
+        waitForPhysicsTasks(futures);
+    }
+
+    private void waitForPhysicsTasks(List<Future<?>> futures) {
+        try {
+            for (Future<?> future : futures) {
+                future.get();
+            }
+        } catch (Exception exception) {
+            throw new RuntimeException("Erreur pendant le calcul physique parallèle", exception);
+        }
+    }
+
     private void resolveSphereCollisions() {
         for (int i = 0; i < spheres.size(); i++) {
             for (int j = i + 1; j < spheres.size(); j++) {
@@ -253,41 +339,45 @@ public class Window {
     }
 
     private void createShaders() {
-        String vertexShader = """
-                #version 120
+        String vertexSource = loadShaderResource("/shaders/sphere.vert");
+        String fragmentSource = loadShaderResource("/shaders/sphere.frag");
+        sphereShader = new ShaderProgram(vertexSource, fragmentSource);
+    }
 
-                varying vec3 vNormal;
+    private String loadShaderResource(String resourcePath) {
+        try (InputStream input = Window.class.getResourceAsStream(resourcePath)) {
+            if (input == null) {
+                throw new IllegalArgumentException("Shader introuvable : " + resourcePath);
+            }
 
-                void main() {
-                    vNormal = normalize(gl_NormalMatrix * gl_Normal);
-                    gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;
-                }
-                """;
-
-        String fragmentShader = """
-                #version 120
-
-                varying vec3 vNormal;
-
-                void main() {
-                    vec3 normal = normalize(vNormal);
-                    vec3 lightDirection = normalize(vec3(0.4, 0.8, 0.6));
-
-                    float diffuse = max(dot(normal, lightDirection), 0.0);
-
-                    vec3 baseColor = vec3(0.0, 0.45, 1.0);
-                    vec3 ambient = baseColor * 0.25;
-                    vec3 finalColor = ambient + baseColor * diffuse * 0.85;
-
-                    gl_FragColor = vec4(finalColor, 1.0);
-                }
-                """;
-
-        sphereShader = new ShaderProgram(vertexShader, fragmentShader);
+            return new String(input.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException exception) {
+            throw new RuntimeException("Impossible de lire le shader : " + resourcePath, exception);
+        }
     }
 
     private void cleanup() {
+        physicsExecutor.shutdown();
+
+        try {
+            if (!physicsExecutor.awaitTermination(2, TimeUnit.SECONDS)) {
+                physicsExecutor.shutdownNow();
+            }
+        } catch (InterruptedException exception) {
+            physicsExecutor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+
+        if (sphereShader != null) {
+            sphereShader.cleanup();
+        }
+
         glfwDestroyWindow(window);
         glfwTerminate();
+    }
+
+    @FunctionalInterface
+    private interface SphereRangeTask {
+        void run(int from, int to);
     }
 }

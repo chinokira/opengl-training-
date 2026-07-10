@@ -219,6 +219,29 @@ public class Sphere {
     }
 
     /**
+     * Accelerate the sphere towards a point.
+     */
+    public void accelerateTowards(float targetX, float targetY, float targetZ,
+                                  float strength, float deltaTime) {
+        float dx = targetX - x;
+        float dy = targetY - y;
+        float dz = targetZ - z;
+        float distanceSquared = dx * dx + dy * dy + dz * dz;
+
+        // Avoid an unstable direction when the sphere is exactly at the target.
+        if (distanceSquared < 0.000001f) {
+            return;
+        }
+
+        float distance = (float) Math.sqrt(distanceSquared);
+        float acceleration = strength * deltaTime;
+
+        velocityX += dx / distance * acceleration;
+        velocityY += dy / distance * acceleration;
+        velocityZ += dz / distance * acceleration;
+    }
+
+    /**
      * Apply damping to the sphere velocity
      */
     public void applyDamping() {
