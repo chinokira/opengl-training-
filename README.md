@@ -1,1 +1,2 @@
-# opengl-training-
+# opengl-training
+
