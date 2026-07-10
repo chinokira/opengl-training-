@@ -15,6 +15,13 @@ public class Sphere {
 
     private float bounce = 0.4f;
 
+    /**
+     * Constructor of the Sphere class
+     * @param x
+     * @param y
+     * @param z
+     * @param radius
+     */
     public Sphere(float x, float y, float z, float radius) {
         this.x = x;
         this.y = y;
@@ -22,6 +29,9 @@ public class Sphere {
         this.radius = radius;
     }
 
+    /**
+     * Draw the sphere
+     */
     public void draw() {
         int stacks = 12;
         int slices = 24;
@@ -69,6 +79,11 @@ public class Sphere {
         }
     }
 
+    /**
+     * Update the sphere position
+     * @param deltaTime
+     * @param gravity
+     */
     public void update(float deltaTime, float gravity) {
         velocityY += gravity * deltaTime;
 
@@ -77,7 +92,18 @@ public class Sphere {
         z += velocityZ * deltaTime;
     }
 
-    public void keepInsideBox(float left, float right, float bottom, float top, float back, float front) {
+    /**
+     * Keep the sphere inside the box
+     * @param box
+     */
+    public void keepInsideBox(Box box) {
+        float left = box.getLeft();
+        float right = box.getRight();
+        float bottom = box.getBottom();
+        float top = box.getTop();
+        float back = box.getBack();
+        float front = box.getFront();
+
         if (x - radius < left) {
             x = left + radius;
             velocityX = -velocityX * bounce;
@@ -111,6 +137,10 @@ public class Sphere {
         }
     }
 
+    /**
+     * Resolve the collision between the sphere and another sphere
+     * @param other
+     */
     public void resolveCollision(Sphere other) {
         float dx = other.x - this.x;
         float dy = other.y - this.y;
@@ -176,18 +206,30 @@ public class Sphere {
         other.velocityZ += impulseZ;
     }
 
+    /**
+     * Set the sphere velocity
+     * @param x
+     * @param y
+     * @param z
+     */
     public void setVelocity(float x, float y, float z) {
         this.velocityX = x;
         this.velocityY = y;
         this.velocityZ = z;
     }
 
+    /**
+     * Apply damping to the sphere velocity
+     */
     public void applyDamping() {
         velocityX *= 0.995f;
         velocityY *= 0.995f;
         velocityZ *= 0.995f;
     }
 
+    /**
+     * Stop the sphere if it is very slow
+     */
     public void stopIfVerySlow() {
         float threshold = 0.02f;
 
@@ -202,21 +244,5 @@ public class Sphere {
         if (Math.abs(velocityZ) < threshold) {
             velocityZ = 0.0f;
         }
-    }
-
-    public float getX() {
-        return x;
-    }
-
-    public float getY() {
-        return y;
-    }
-
-    public float getZ() {
-        return z;
-    }
-
-    public float getRadius() {
-        return radius;
     }
 }

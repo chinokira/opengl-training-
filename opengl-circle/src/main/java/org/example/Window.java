@@ -20,6 +20,8 @@ public class Window {
     
     private ShaderProgram sphereShader;
 
+    private Box box;
+
     private int frameCount = 0;
     private int currentFps = 0;
     private float fpsTimer = 0.0f;
@@ -29,13 +31,6 @@ public class Window {
     private float cameraDistance = 4.0f;
 
     private final float gravity = -9.81f;
-
-    private final float boxLeft = -1.0f;
-    private final float boxRight = 1.0f;
-    private final float boxBottom = -1.0f;
-    private final float boxTop = 1.0f;
-    private final float boxBack = -1.0f;
-    private final float boxFront = 1.0f;
 
     public void run() {
         init();
@@ -76,44 +71,13 @@ public class Window {
 
         createShaders();
 
+        box = new Box();
+
         glfwShowWindow(window);
 
         createSpheres();
     }
 
-    private void createShaders() {
-        String vertexShader = """
-                #version 120
-
-                varying vec3 vNormal;
-
-                void main() {
-                    vNormal = normalize(gl_NormalMatrix * gl_Normal);
-                    gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;
-                }
-                """;
-
-        String fragmentShader = """
-                #version 120
-
-                varying vec3 vNormal;
-
-                void main() {
-                    vec3 normal = normalize(vNormal);
-                    vec3 lightDirection = normalize(vec3(0.4, 0.8, 0.6));
-
-                    float diffuse = max(dot(normal, lightDirection), 0.0);
-
-                    vec3 baseColor = vec3(0.0, 0.45, 1.0);
-                    vec3 ambient = baseColor * 0.25;
-                    vec3 finalColor = ambient + baseColor * diffuse * 0.85;
-
-                    gl_FragColor = vec4(finalColor, 1.0);
-                }
-                """;
-
-        sphereShader = new ShaderProgram(vertexShader, fragmentShader);
-    }
 
     private void createSpheres() {
         int count = 80;
@@ -164,14 +128,14 @@ public class Window {
 
             for (Sphere sphere : spheres) {
                 sphere.update(deltaTime, gravity);
-                sphere.keepInsideBox(boxLeft, boxRight, boxBottom, boxTop, boxBack, boxFront);
+                sphere.keepInsideBox(box);
             }
 
             for (int i = 0; i < 8; i++) {
                 resolveSphereCollisions();
 
                 for (Sphere sphere : spheres) {
-                    sphere.keepInsideBox(boxLeft, boxRight, boxBottom, boxTop, boxBack, boxFront);
+                    sphere.keepInsideBox(box);
                 }
             }
 
@@ -180,7 +144,7 @@ public class Window {
                 sphere.applyDamping();
             }
 
-            drawBox3D();
+            box.drawBox3D();
 
             sphereShader.use();
 
@@ -288,51 +252,38 @@ public class Window {
         glRotatef(cameraYaw, 0.0f, 1.0f, 0.0f);
     }
 
-    private void drawBox3D() {
-        glColor3f(1.0f, 1.0f, 1.0f);
-        glLineWidth(2.0f);
+    private void createShaders() {
+        String vertexShader = """
+                #version 120
 
-        glBegin(GL_LINES);
+                varying vec3 vNormal;
 
-        glVertex3f(boxLeft, boxBottom, boxBack);
-        glVertex3f(boxRight, boxBottom, boxBack);
+                void main() {
+                    vNormal = normalize(gl_NormalMatrix * gl_Normal);
+                    gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;
+                }
+                """;
 
-        glVertex3f(boxRight, boxBottom, boxBack);
-        glVertex3f(boxRight, boxTop, boxBack);
+        String fragmentShader = """
+                #version 120
 
-        glVertex3f(boxRight, boxTop, boxBack);
-        glVertex3f(boxLeft, boxTop, boxBack);
+                varying vec3 vNormal;
 
-        glVertex3f(boxLeft, boxTop, boxBack);
-        glVertex3f(boxLeft, boxBottom, boxBack);
+                void main() {
+                    vec3 normal = normalize(vNormal);
+                    vec3 lightDirection = normalize(vec3(0.4, 0.8, 0.6));
 
-        glVertex3f(boxLeft, boxBottom, boxFront);
-        glVertex3f(boxRight, boxBottom, boxFront);
+                    float diffuse = max(dot(normal, lightDirection), 0.0);
 
-        glVertex3f(boxRight, boxBottom, boxFront);
-        glVertex3f(boxRight, boxTop, boxFront);
+                    vec3 baseColor = vec3(0.0, 0.45, 1.0);
+                    vec3 ambient = baseColor * 0.25;
+                    vec3 finalColor = ambient + baseColor * diffuse * 0.85;
 
-        glVertex3f(boxRight, boxTop, boxFront);
-        glVertex3f(boxLeft, boxTop, boxFront);
+                    gl_FragColor = vec4(finalColor, 1.0);
+                }
+                """;
 
-        glVertex3f(boxLeft, boxTop, boxFront);
-        glVertex3f(boxLeft, boxBottom, boxFront);
-
-        glVertex3f(boxLeft, boxBottom, boxBack);
-        glVertex3f(boxLeft, boxBottom, boxFront);
-
-        glVertex3f(boxRight, boxBottom, boxBack);
-        glVertex3f(boxRight, boxBottom, boxFront);
-
-        glVertex3f(boxRight, boxTop, boxBack);
-        glVertex3f(boxRight, boxTop, boxFront);
-
-        glVertex3f(boxLeft, boxTop, boxBack);
-        glVertex3f(boxLeft, boxTop, boxFront);
-
-        glEnd();
-
-        glLineWidth(1.0f);
+        sphereShader = new ShaderProgram(vertexShader, fragmentShader);
     }
 
     private void cleanup() {
